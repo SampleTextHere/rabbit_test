@@ -22,3 +22,4 @@ C:\Users\RAU\desktop\rabbit_test\Consumer\obj\Debug\net10.0\refint\Consumer.dll
 C:\Users\RAU\desktop\rabbit_test\Consumer\obj\Debug\net10.0\Consumer.pdb
 C:\Users\RAU\desktop\rabbit_test\Consumer\obj\Debug\net10.0\Consumer.genruntimeconfig.cache
 C:\Users\RAU\desktop\rabbit_test\Consumer\obj\Debug\net10.0\ref\Consumer.dll
+C:\Users\RAU\Desktop\rabbit_test\Consumer\obj\Debug\net10.0\Consumer.sourcelink.json

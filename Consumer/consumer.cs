@@ -11,6 +11,7 @@ using System;
 using System.Text;
 using System.Linq;
 using System.Data.SqlClient;
+using System.Threading;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
@@ -22,11 +23,13 @@ var factory = new ConnectionFactory
     Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS") ?? "guest"
 };
 
-// Wait for the broker to become reachable.
+// Wait for the broker to become reachable (retry indefinitely).
 Console.WriteLine("Waiting for RabbitMQ...");
 IConnection connection = null!;
-for (int i = 0; i < 30; i++)
+var attempt = 0;
+while (true)
 {
+    attempt++;
     try
     {
         connection = await factory.CreateConnectionAsync();
@@ -35,15 +38,10 @@ for (int i = 0; i < 30; i++)
     }
     catch (BrokerUnreachableException)
     {
-        Console.WriteLine($"RabbitMQ not ready, retrying in {2 * (i + 1)}s...");
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        var delaySeconds = 2;
+        Console.WriteLine($"RabbitMQ not ready (attempt {attempt}), {delaySeconds}...");
+        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
     }
-}
-
-if (connection == null)
-{
-    Console.WriteLine("Failed to connect to RabbitMQ after 30 retries");
-    return;
 }
 
 using (connection)
@@ -66,7 +64,7 @@ using (connection)
         var body = ea.Body.ToArray();
         var message = Encoding.UTF8.GetString(body);
         var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-        Console.WriteLine($"[{timestamp}] Received {message}");
+        //Console.WriteLine($"[{timestamp}] Received {message}");
 
         // Process the message (placeholder for your SQL). Only ack after this completes.
         await MessageProcessor.ExecuteSqlAsync(message);
@@ -77,6 +75,18 @@ using (connection)
 
     await channel.BasicConsumeAsync("hello", autoAck: false, consumer: consumer);
 
+    // Periodic metrics: print successes/failures every second.
+    _ = Task.Run(async () =>
+    {
+        while (true)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            var snapshot = MessageProcessor.SnapshotAndResetInterval();
+            var ts = DateTime.Now.ToString("HH:mm:ss.fff");
+            Console.WriteLine($"[{ts}] Metrics - last 1s: success={snapshot.intervalSuccess}, failed={snapshot.intervalFailure}, avg_time={snapshot.avgTimeMs:F1}ms, msgs/sec={snapshot.msgsPerSec:F2}; totals: success={snapshot.totalSuccess}, failed={snapshot.totalFailure}");
+        }
+    });
+
     // Keep the app running continuously
     Console.WriteLine("Consumer running. Press Ctrl+C to exit.");
     await Task.Delay(Timeout.InfiniteTimeSpan);
@@ -84,44 +94,91 @@ using (connection)
 
 internal static class MessageProcessor
 {
+    private static long totalSuccess;
+    private static long totalFailure;
+    private static long intervalSuccess;
+    private static long intervalFailure;
+    private static long intervalTotalMs;
+    private static long intervalMessageCount;
+    private static readonly DateTime startTime = DateTime.Now;
+
     public static async Task ExecuteSqlAsync(string message, CancellationToken cancellationToken = default)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            Console.WriteLine("  Attempting SQL connection...");
+            //Console.WriteLine("  Attempting SQL connection...");
 
             // Expect the producer to send a number (as text). Use it as TOP N.
             if (!int.TryParse(message.Trim(), out var topN) || topN <= 0)
             {
+                Interlocked.Increment(ref totalFailure);
+                Interlocked.Increment(ref intervalFailure);
                 Console.WriteLine("  Message is not a positive integer; skipping SQL execution.");
                 return;
             }
 
             // Parameterized TOP to avoid injection. SQL Server supports TOP (@n) with parentheses.
-            var sql = "SELECT TOP (@TopN) * FROM gtttah";
+            var sql = "SELECT * FROM gtttah where rec_id <= (@TopN)";
             var parameters = new[] { new SqlParameter("@TopN", topN) };
 
             var results = await Database.ExecuteQueryAsync(sql, parameters, cancellationToken);
 
             if (results.Count == 0)
             {
-                Console.WriteLine("  SQL executed, no rows returned.");
+                //Console.WriteLine("  SQL executed, no rows returned.");
+                //Interlocked.Increment(ref totalSuccess);
+                //Interlocked.Increment(ref intervalSuccess);
+                Interlocked.Increment(ref intervalFailure);
+                Interlocked.Increment(ref totalFailure);
                 return;
             }
 
-            Console.WriteLine($"  SQL executed successfully. Rows returned: {results.Count}");
-            PrintRows(results);
+            //Console.WriteLine($"  SQL executed successfully. Rows returned: {results.Count}");
+            //PrintRows(results);
+
+            Interlocked.Increment(ref totalSuccess);
+            Interlocked.Increment(ref intervalSuccess);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"  SQL ERROR: {ex.GetType().Name}: {ex.Message}");
             if (ex.InnerException != null)
             {
-                Console.WriteLine($"  Inner: {ex.InnerException.Message}");
+                Console.WriteLine($"  Inner Exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
             }
+            // Log full stack trace for debugging
+            Console.WriteLine($"  Stack Trace: {ex.StackTrace}");
+            Interlocked.Increment(ref totalFailure);
+            Interlocked.Increment(ref intervalFailure);
             // Re-throw to prevent ack if SQL fails
             throw;
         }
+        finally
+        {
+            sw.Stop();
+            Interlocked.Add(ref intervalTotalMs, sw.ElapsedMilliseconds);
+            Interlocked.Increment(ref intervalMessageCount);
+        }
+    }
+
+    public static (long intervalSuccess, long intervalFailure, long totalSuccess, long totalFailure, double avgTimeMs, double msgsPerSec) SnapshotAndResetInterval()
+    {
+        var s = Interlocked.Exchange(ref intervalSuccess, 0);
+        var f = Interlocked.Exchange(ref intervalFailure, 0);
+        var totalMs = Interlocked.Exchange(ref intervalTotalMs, 0);
+        var msgCount = Interlocked.Exchange(ref intervalMessageCount, 0);
+        var ts = Interlocked.Read(ref totalSuccess);
+        var tf = Interlocked.Read(ref totalFailure);
+        
+        var avgTimeMs = msgCount > 0 ? (double)totalMs / msgCount : 0;
+        
+        // Calculate overall msgs/sec since start
+        var totalMessages = ts + tf;
+        var elapsedSeconds = (DateTime.Now - startTime).TotalSeconds;
+        var msgsPerSec = elapsedSeconds > 0 ? totalMessages / elapsedSeconds : 0;
+        
+        return (s, f, ts, tf, avgTimeMs, msgsPerSec);
     }
 
     private static void PrintRows(List<Dictionary<string, object?>> rows)

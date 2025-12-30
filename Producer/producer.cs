@@ -4,7 +4,7 @@
 // - Retries connection until the broker is ready.
 // - Declares a durable queue so messages and the queue survive broker restarts.
 // - Publishes messages as persistent (DeliveryMode = Persistent) so they are stored on disk.
-// - Sends a message every 5 seconds in an infinite loop.
+// - Sends configurable messages per second (default 20) in an infinite loop.
 using System;
 using System.Text;
 using RabbitMQ.Client;
@@ -51,8 +51,12 @@ using (connection)
     // Make published messages persistent so the broker stores them on disk.
     var props = new BasicProperties { DeliveryMode = DeliveryModes.Persistent };
 
-    // Simple demo loop: publish one message every 5 seconds.
-    Console.WriteLine("Sending messages every 5 seconds. Press Ctrl+C to exit.");
+    // High-rate loop: publish configurable messages per second.
+    // Set PRODUCER_MSGS_PER_SEC env var to control rate (default 20 msg/sec).
+    var rateEnv = Environment.GetEnvironmentVariable("PRODUCER_MSGS_PER_SEC");
+    var msgsPerSec = int.TryParse(rateEnv, out var r) && r > 0 ? r : 20;
+    var delayMs = Math.Max(1, (int)Math.Round(1000.0 / msgsPerSec));
+    Console.WriteLine($"Sending ~{msgsPerSec} messages per second (delay~{delayMs}ms). Press Ctrl+C to exit.");
     
     int messageCount = 0;
     while (true)
@@ -66,6 +70,7 @@ using (connection)
         await channel.BasicPublishAsync(exchange: string.Empty, routingKey: "hello", mandatory: true, basicProperties: props, body: body);
         Console.WriteLine($"[{timestamp}] Sent {message}");
         
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        // Use configurable delay derived from msgs/sec
+        await Task.Delay(TimeSpan.FromMilliseconds(delayMs));
     }
 }

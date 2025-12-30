@@ -15,5 +15,6 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
+      PRODUCER_MSGS_PER_SEC: 10
     depends_on:
       - rabbitmq

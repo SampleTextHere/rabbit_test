@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "Poy2qkVduI0=",
+  "dgSpecHash": "3vZlxHW1xEk=",
   "success": true,
-  "projectFilePath": "C:\\Users\\RAU\\desktop\\rabbit_test\\Consumer\\Consumer.csproj",
+  "projectFilePath": "C:\\Users\\RAU\\Desktop\\rabbit_test\\Consumer\\Consumer.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\RAU\\.nuget\\packages\\rabbitmq.client\\7.2.0\\rabbitmq.client.7.2.0.nupkg.sha512",
     "C:\\Users\\RAU\\.nuget\\packages\\runtime.native.system.data.sqlclient.sni\\4.7.0\\runtime.native.system.data.sqlclient.sni.4.7.0.nupkg.sha512",
