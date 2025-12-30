@@ -119,7 +119,7 @@ internal static class MessageProcessor
             }
 
             // Parameterized TOP to avoid injection. SQL Server supports TOP (@n) with parentheses.
-            var sql = "SELECT * FROM gtttah where rec_id <= (@TopN)";
+            var sql = "SELECT * FROM gtttah where rec_id = (@TopN)";
             var parameters = new[] { new SqlParameter("@TopN", topN) };
 
             var results = await Database.ExecuteQueryAsync(sql, parameters, cancellationToken);
