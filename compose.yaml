@@ -1,0 +1,19 @@
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  
+  producer:
+    image: producer
+    build:
+      context: .
+      dockerfile: Producer/Dockerfile
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    depends_on:
+      - rabbitmq

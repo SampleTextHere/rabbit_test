@@ -1,0 +1,11 @@
+
+services:
+  consumer:
+    image: consumer
+    build:
+      context: .
+      dockerfile: Consumer/Dockerfile
+      args:
+        - configuration=Debug
+    volumes:
+      - ~/.vsdbg:/remote_debugger:rw
