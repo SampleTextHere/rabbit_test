@@ -1,0 +1,50 @@
+# Build results
+bin/
+obj/
+
+# Visual Studio
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.sln.docstates
+
+# NuGet
+.nuget/
+*.nupkg
+*.snupkg
+*.nuget.props
+*.nuget.targets
+
+# ReSharper
+.idea/
+*.resharper
+*.resharper.user
+
+# Visual Studio cache/options
+.vs/
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+*.log
+
+# User-specific files
+*.suo
+*.user
+*.userprefs
+*.userprefs.*
+
+# OS-specific
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE files
+*.code-workspace
+*.vscode/
+
+# Docker
+.dockerignore
